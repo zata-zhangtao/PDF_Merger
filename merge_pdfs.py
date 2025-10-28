@@ -61,7 +61,11 @@ def merge_pdfs_by_order(pdf_folder="files", output_filename="merged_output.pdf",
                 continue
 
         # Write the merged PDF
-        output_path = folder_path / output_filename
+        # Handle both absolute paths and relative filenames
+        if os.path.isabs(output_filename):
+            output_path = Path(output_filename)
+        else:
+            output_path = folder_path / output_filename
         with open(output_path, 'wb') as output_file:
             merger.write(output_file)
 
@@ -112,7 +116,9 @@ def merge_specific_pdfs(pdf_files, output_filename="merged_specific.pdf"):
                 print(f"Warning: Could not add {pdf_file}: {e}")
                 continue
 
-        with open(output_filename, 'wb') as output_file:
+        # Handle both absolute paths and relative filenames
+        output_path = Path(output_filename)
+        with open(output_path, 'wb') as output_file:
             merger.write(output_file)
 
         merger.close()
@@ -175,6 +181,7 @@ class PDFMergerGUI(QMainWindow):
         super().__init__()
         self.selected_files = []
         self.output_folder = ""
+        self.output_path = ""
         self.init_ui()
         
     def init_ui(self):
@@ -229,9 +236,13 @@ class PDFMergerGUI(QMainWindow):
         output_layout = QVBoxLayout(output_group)
         
         output_file_layout = QHBoxLayout()
-        output_file_layout.addWidget(QLabel("Output filename:"))
-        self.output_filename = QLineEdit("merged_output.pdf")
-        output_file_layout.addWidget(self.output_filename)
+        output_file_layout.addWidget(QLabel("Output file:"))
+        self.output_path_field = QLineEdit("merged_output.pdf")
+        self.output_path_field.setReadOnly(True)
+        self.browse_output_btn = QPushButton("Browse...")
+        self.browse_output_btn.clicked.connect(self.select_output_path)
+        output_file_layout.addWidget(self.output_path_field)
+        output_file_layout.addWidget(self.browse_output_btn)
         output_layout.addLayout(output_file_layout)
         
         layout.addWidget(output_group)
@@ -289,6 +300,21 @@ class PDFMergerGUI(QMainWindow):
         self.file_list.clear()
         self.log("Cleared all selected files")
         
+    def select_output_path(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Merged PDF As", 
+            "merged_output.pdf",
+            "PDF Files (*.pdf);;All Files (*)"
+        )
+        if file_path:
+            # Ensure .pdf extension
+            if not file_path.lower().endswith('.pdf'):
+                file_path += '.pdf'
+            self.output_path = file_path
+            self.output_path_field.setText(file_path)
+            self.log(f"Output path set to: {file_path}")
+        
     def log(self, message):
         self.log_text.append(message)
         self.log_text.verticalScrollBar().setValue(
@@ -296,16 +322,23 @@ class PDFMergerGUI(QMainWindow):
         )
         
     def merge_pdfs(self):
-        if not self.output_filename.text().strip():
-            QMessageBox.warning(self, "Warning", "Please enter an output filename")
+        # Determine output path
+        output_path = self.output_path if self.output_path else self.output_path_field.text().strip()
+        
+        if not output_path:
+            QMessageBox.warning(self, "Warning", "Please select an output file path")
             return
+            
+        # Ensure .pdf extension
+        if not output_path.lower().endswith('.pdf'):
+            output_path += '.pdf'
             
         if self.output_folder:
             # Folder mode
-            self.start_merge_worker(self.output_folder, self.output_filename.text(), 'folder')
+            self.start_merge_worker(self.output_folder, output_path, 'folder')
         elif self.selected_files:
             # Files mode
-            self.start_merge_worker(self.selected_files, self.output_filename.text(), 'files')
+            self.start_merge_worker(self.selected_files, output_path, 'files')
         else:
             QMessageBox.warning(self, "Warning", "Please select a folder or add PDF files")
             return
